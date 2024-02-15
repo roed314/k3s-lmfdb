@@ -3,8 +3,9 @@ Table name: `k3_families`
 | Column    | Type    | Description    |
 | ----------- | -------------- | --------------- |
 | picard_lattice | text |  label of the indefinite lattice  isometric to Pic(X) |
+| transcendental_lattice | text | label of the transcendental lattice (orthogonal complement of Pic(X) inside II_{3,19}) |
 | polarized_lattice_genus | text |  label of the genus of the positive definite lattice L in the decomposition Pic(X) = U + L.  If there is no such decomposition, this field is null |
-| num_elliptic_surfaces | smallint | number of elliptic surfaces isomorphic to X |
+| num_fibrations | smallint | number of elliptic surfaces isomorphic to X |
 | discriminant | integer | discriminant of Pic(X) |
 | related_objects | text[] | other objects related to X (such as modular forms, etc. |
 | parameter_space_ambient | text | the label of the ambient space of the parameter space as a toric variety|
