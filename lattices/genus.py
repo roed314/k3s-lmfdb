@@ -1,4 +1,7 @@
 def get_product(set_list):
+    '''
+    Returns all elements in the cartesian product of the sets in set_list
+    '''
     if len(set_list) == 0:
         return [[]]
     if len(set_list) == 1:
@@ -6,6 +9,10 @@ def get_product(set_list):
     return [[x] + y for x in set_list[0] for y in get_product(set_list[1:])]
 
 def get_dets(det_set, sign, num):
+    '''
+    Returns all possible sequences of length num of signs whose product is sign.
+    These correspond to the quadratic character of the determinants of Jordan factors.
+    '''
     dets = []
     b = len(det_set)
     num_opts = b**(num - 1)
@@ -18,6 +25,9 @@ def get_dets(det_set, sign, num):
     return dets  
 
 def oddity(s):
+    '''
+    Copmute the oddity for a list of quintuples that describe a 2-adic genus symbol
+    '''
     odd = sum([t[-1] for t in s])
     k = len([t for t in s if t[0] % 2 == 1 and t[2] in [3,5]])
     odd += 4*k
@@ -25,10 +35,17 @@ def oddity(s):
     return odd
 
 def expected_oddity(n_plus, n_minus, odd_symbols):
+    '''
+    Returns the oddity of the 2-adic genus symbol, given the signature and the p-adic genus symbols at the odd primes.
+    This follows from the oddity condition.
+    '''
     excess = sum([symb.excess() for symb in odd_symbols])
     return (excess + n_plus - n_minus) % 8
 
 def all_local_genus_symbols(rank, det, p):
+    '''
+    Returns all possible p-adic genus symbols for a lattice of a given rank and determinant
+    '''
     val_det, unit_det = ZZ(det).val_unit(p)
     symbs = []
     det_set = [1,-1]
@@ -51,12 +68,19 @@ def listify_symbol(x):
     return reduce(lambda x,y : x+y, x.canonical_symbol())
 
 def get_unique(symbs):
+    '''
+    Returns a list containing only one symbol from every equivalence class
+    '''
     symb_dict = {}
     for i,s in enumerate(symbs):
         symb_dict[tuple(listify_symbol(s))] = i
     return [symbs[i] for i in symb_dict.values()]
 
 def all_diadic_genus_symbols(n_plus, n_minus, det, odd_symbols):
+    '''
+    Returns all the possible 2-adic genus symbols of a global genus symbol having a signature (n_plus, m_minus),
+    determinant det and p-adic genus symbols odd_symbols at the odd primes p dividing the determinant
+    '''
     rank = n_plus + n_minus
     val_det, unit_det = ZZ(det).val_unit(p)
     symbs = []
@@ -104,6 +128,9 @@ def all_diadic_genus_symbols(n_plus, n_minus, det, odd_symbols):
     return get_unique(gen_symbs)
 
 def all_genus_symbols(n_plus, n_minus, det):
+    '''
+    Returns all the genus symbols of even lattices with signature (n_plus, n_minus) and determinant det
+    '''
     rank = n_plus + n_minus
     primes = (2*det).prime_divisors()
     odd_primes = primes[1:]
