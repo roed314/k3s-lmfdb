@@ -296,7 +296,7 @@ def genus_symbol_from_label(label):
     :param label: str
     :return: GenusSymbol_global_ring
 
-    >>> all_syms = all_genus_symbols(8,0,2^5*3^4*5^3*7^2,is_even=False)
+    >>> all_syms = all_genus_symbols(8,0,2**5*3**4*5**3*7**2,is_even=False)
     >>> all([genus_symbol_from_label(create_genus_label(s)) == s for s in all_syms])
     True
     '''
