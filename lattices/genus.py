@@ -213,4 +213,182 @@ def all_genus_symbols(n_plus, n_minus, det, is_even=True):
             g = GenusSymbol_global_ring((n_plus, n_minus), [symb2] + odd_symbols)
             global_symbs.append(g)
     return global_symbs
+
+def encode_rank(rk):
+    assert rk >= 0
+    if (rk < 10):
+        return str(rk)
+    if (rk < 10 + 26):
+        return chr(ord('a') + (rk - 10))
+    assert rk < 10 + 26*2
+    return chr(ord('A') + (rk - 10 - 26))
+
+def create_genus_label(genus_sym):
+    rk = genus_sym.rank()
+    sig = genus_sym.signature()
+    det = genus_sym.determinant()
+    primes = (2*det).prime_divisors()
+    local_symbols = [genus_sym.local_symbol(p).symbol_tuple_list() for p in primes]
+    local_symbols_filtered = [genus_sym.local_symbol(p).symbol_tuple_list() for p in primes if det.valuation(p) > 1]
+    max_vals = [s[-1][0] for s in local_symbols_filtered]
+    rks = [[0 for i in range(max_val)] for max_val in max_vals]
+    for i, s in enumerate(local_symbols_filtered):
+        for t in s:
+            if t[0] > 0:
+                rks[i][t[0]-1] = t[1]
+    jordan_ranks = ["".join([encode_rank(r) for r in rk]) for rk in rks]
+
+    # we start by encoding the local symbol at 2
     
+    s2 = genus_sym.local_symbol(2)
+    block_n = s2.number_of_blocks()
+    train_ends = [x[-1] for x in s2.trains()]
+    assert train_ends[-1] == block_n-1
+
+    # The following can be made more efficient, but I really want to keep track of the single bits in the encoding for now,
+    # for debbugging purposes
+    bits = []
+    # compartments are in correspondece with subsets of {0..block_n-1}
+    comparts = reduce(lambda x,y:x+y, s2.compartments())
+    compart_symbol = sum([1 << e for e in comparts])
+    # note that the compart_symbol will be even if and only if the lattice is even
+    compart_nbits = block_n
+    bits += ZZ(compart_symbol).digits(2, padto=compart_nbits) 
+    
+    oddities = [sum([s2.canonical_symbol()[t][4] for t in cmpart]) % 8 for cmpart in s2.compartments()]
+    oddities_symbol = sum([o*(1 << (3*i)) for i,o in enumerate(oddities)])
+    oddities_nbits = 3*len(s2.compartments())
+    bits += ZZ(oddities_symbol).digits(2, padto=oddities_nbits)  
+    
+    signs = [s2.canonical_symbol()[train[0]][2] for train in s2.trains()]
+    bits += [ZZ(1-s) // 2 for s in signs]
+
+    assert primes[0] == 2
+    for p in primes[1:]:
+        s = genus_sym.local_symbol(p)
+        signs = [t[2] for t in s.symbol_tuple_list()]        
+        bits += [ZZ(1-s) // 2 for s in signs]
+        
+    local_data = sum([bits[i] << i for i in range(len(bits))])
+    label = ".".join([str(x) for x in [rk,sig,det] + jordan_ranks + [hex(local_data)[2:]]])
+    return label
+
+def decode_rank(c):
+    assert ((ord('0') <= ord(c) <= ord('9')) or (ord('a') <= ord(c) <= ord('z')) or (ord('A') <= ord(c) <= ord('Z')))
+    if (ord('0') <= ord(c) <= ord('9')):
+        return ord(c) - ord('0')
+    if (ord('a') <= ord(c) <= ord('z')):
+        return ord(c) - ord('a') + 10
+    assert (ord('A') <= ord(c) <= ord('Z'))
+    return ord(c) - ord('A') + 10 + 26
+
+def genus_symbol_from_label(label):
+    '''
+    Returns a genus symbol corresponding to an LMFDB label.
+
+    :param label: str
+    :return: GenusSymbol_global_ring
+
+    >>> all_syms = all_genus_symbols(8,0,2**5*3**4*5**3*7**2,is_even=False)
+    >>> all([genus_symbol_from_label(create_genus_label(s)) == s for s in all_syms])
+    True
+    '''
+    split_label = label.split(".")
+    rk = ZZ(split_label[0])
+    sig = ZZ(split_label[1])
+    n_plus = (rk + sig) // 2
+    n_minus = (rk - sig) // 2
+    det = ZZ(split_label[2])
+    primes = (2*det).prime_divisors()
+    symbols = []
+    for i,p in enumerate(primes):
+        rank_dec = [decode_rank(c) for c in split_label[3+i]]
+        rank_dec = [rk - sum(rank_dec)] + rank_dec
+        symbols_p = [[i, rank_dec[i], 1] for i in range(len(rank_dec)) if rank_dec[i] > 0]
+        symbols.append(symbols_p)
+
+    # initializing the symbol at 2
+    symbols[0] = [s + [0,0] for s in symbols[0]]
+    num_blocks_2 = len(symbols[0])
+    
+    local_data = ZZ(split_label[3 + len(primes)], base=16)
+
+    compart_bits = (local_data % (1 << num_blocks_2)).digits(2, padto=num_blocks_2)
+
+    for i in range(num_blocks_2):
+        symbols[0][i][3] = compart_bits[i]
+
+    compartments = []
+    trains = []
+    in_compartment = False
+    train_start = 0
+    for i in range(num_blocks_2):
+        if i > 0:
+            scale_diff = symbols[0][i][0] - symbols[0][i-1][0]
+            if (scale_diff > 2) and (i > train_start):
+                trains.append([j for j in range(train_start,i)])
+                train_start = i
+            
+        if compart_bits[i] == 1:
+            if in_compartment:
+                if (i > 0) and (scale_diff > 1):
+                    compartments.append([j for j in range(compart_start, i)])
+                    compart_start = i
+            if not in_compartment:
+                compart_start = i
+                in_compartment = True
+                if (i > train_start) and (scale_diff > 1):
+                    trains.append([j for j in range(train_start,i)])
+                    train_start = i
+        else: # compart_bits[i] == 0
+            if in_compartment:
+                in_compartment = False
+                compartments.append([j for j in range(compart_start, i+1)])
+                if (i > train_start) and (scale_diff == 2):
+                    trains.append([j for j in range(train_start,i)])
+                    train_start = i
+            else:
+                if (i > train_start):
+                    trains.append([j for j in range(train_start,i)])
+                    train_start = i
+                
+    if in_compartment:
+        compartments.append([j for j in range(compart_start, num_blocks_2)])
+
+    trains.append([j for j in range(train_start, num_blocks_2)])
+            
+    local_data >>= num_blocks_2
+    
+    oddity_bits = (local_data % (1 << (3*len(compartments)))).digits(2, padto=3*len(compartments))
+
+    oddity_nums = [oddity_bits[3*i:3*(i+1)] for i in range(len(compartments))]
+    oddities = [sum([(b[i] << i) for i in range(3)]) for b in oddity_nums]
+
+    # updating oddities
+    
+    for j,c in enumerate(compartments):
+        symbols[0][c[0]][4] = oddities[j]
+
+    local_data >>= 3 * len(compartments)
+
+    # train_signs = [i for i in range(len(trains)) if (local_data.bits()[i+offset] == 1)]
+
+    train_sign_bits = (local_data % (1 << len(trains))).digits(2, padto=len(trains))
+
+    # updating signs at 2
+    
+    for t,train in enumerate(trains):
+        sign = (-1)**(train_sign_bits[t])
+        symbols[0][train[0]][2] = 3 if sign == -1 else 1
+
+    local_data >>= len(trains)
+
+    for j in range(1, len(symbols)):
+        n = len(symbols[j])
+        sign_bits = (local_data % (1 << n)).digits(2, padto=n)
+        for i in range(n):
+            symbols[j][i][2] = (-1)**(sign_bits[i])
+        local_data >>= n
+
+    local_symbols = [Genus_Symbol_p_adic_ring(p, symbols[j]) for j,p in enumerate(primes)]
+    return GenusSymbol_global_ring((n_plus, n_minus), local_symbols)
