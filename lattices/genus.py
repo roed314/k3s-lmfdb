@@ -1,3 +1,4 @@
+import os
 from functools import reduce
 
 from sage.rings.integer_ring import ZZ
@@ -6,6 +7,8 @@ from sage.arith.misc import prime_divisors
 from sage.misc.misc_c import prod
 from sage.quadratic_forms.genera.genus import Genus_Symbol_p_adic_ring
 from sage.quadratic_forms.genera.genus import GenusSymbol_global_ring
+from sage.interfaces.magma import magma
+from sage.matrix.constructor import matrix
 
 def get_product(set_list):
     '''
@@ -61,7 +64,7 @@ def get_dets(det_set, sign, num):
         sgn = sign*prod(det)
         det += [sgn]
         dets.append(det)
-    return dets
+    return dets  
 
 def oddity(s):
     '''
@@ -140,12 +143,9 @@ def all_diadic_genus_symbols(n_plus, n_minus, det, odd_symbols, is_even=True):
             comps = []
             for block in blocks:
                 oddities = []
-                if block[0] == 0:
+                if (block[0] == 0) and is_even:
                     # if the scaling is trivial and we want an even lattice, we cannot have any oddity
-                    if is_even:
-                        oddities = [[0,0]]
-                    else:
-                        oddities = [[0,0]] + [[1,o] for o in range(8)]
+                    oddities = [[0,0]]
                 elif block[1] == 1:
                     if block[2] == 1: 
                         oddities = [[1,1],[1,7]]
@@ -224,6 +224,41 @@ def encode_rank(rk):
     return chr(ord('A') + (rk - 10 - 26))
 
 def create_genus_label(genus_sym):
+    '''
+    Returns a string which is the LMFDB label of the genus symbol.
+    Label is in the format r.s.d.j_1.j_2....j_k.x, where 
+    r is the rank of the lattices
+    s is the signature (n_plus - n_minus)
+    d is the determinant
+    If p_1, ... , p_k are the primes whose squares divide 2*d (p_i^2 | 2*d), then
+    j_1,...,j_k are corresponding rank decompositions of their Jordan forms, omitting the first, encoded in base 62
+    (digits 0-9, then lowercase a-z then uppercase A-Z)
+    For example, if the pairs of (valuation, rank) appearing in the decomposition are (3, 1), (4,10), (6,37), 
+    it will be encoded as 01a0B.
+    The last component of the label, x, is a hexadecimal string whose bits represent the local data.
+    Let n_2 be the number of non-zero blocks in the Jordan decomposition at 2.
+    The least n_2 bits specify the types (I or II) of the non-zero blocks at 2.
+    From these, once can deduce the compartments and trains in the local symbol at 2, let c, t be their numbers.
+    The next 3*c bits represent the oddities of the compartments, with every 3 bits giving an oddity mod 8.
+    The next t bits represent the signs of the trains.
+    Finally, for every other prime p dividing d, in increasing order, if there are n_p non-zero blocks in the 
+    Jordan decomposition at p, we add n_p bits representing the signs of these blocks.
+
+    :param genus_sym: GenusSymbol_global_ring
+    :return: str 
+
+    >>> q = QuadraticForm(ZZ,3, [1,0,1,1,0,3]).Hessian_matrix()
+    >>> create_genus_label(Genus(q))
+    '3.3.22.a6'
+
+    >>> s = all_genus_symbols(5,0,2*61)[0]
+    >>> create_genus_label(s)
+    '5.5.122.66'
+
+    >>> s = all_genus_symbols(8,0,2**5*3**4*5**3*7**2,is_even=False)[0]
+    >>> create_genus_label(s)
+    '8.8.15876000.00001.0001.001.01.a267'
+    '''
     rk = genus_sym.rank()
     sig = genus_sym.signature()
     det = genus_sym.determinant()
@@ -239,7 +274,7 @@ def create_genus_label(genus_sym):
     jordan_ranks = ["".join([encode_rank(r) for r in rk]) for rk in rks]
 
     # we start by encoding the local symbol at 2
-
+    
     s2 = genus_sym.local_symbol(2)
     block_n = s2.number_of_blocks()
     train_ends = [x[-1] for x in s2.trains()]
@@ -249,31 +284,47 @@ def create_genus_label(genus_sym):
     # for debbugging purposes
     bits = []
     # compartments are in correspondece with subsets of {0..block_n-1}
-    comparts = reduce(lambda x,y:x+y, s2.compartments())
+    comparts = reduce(lambda x,y:x+y, s2.compartments(),[])
     compart_symbol = sum([1 << e for e in comparts])
     # note that the compart_symbol will be even if and only if the lattice is even
     compart_nbits = block_n
-    bits += ZZ(compart_symbol).digits(2, padto=compart_nbits)
-
+    bits += ZZ(compart_symbol).digits(2, padto=compart_nbits) 
+    
     oddities = [sum([s2.canonical_symbol()[t][4] for t in cmpart]) % 8 for cmpart in s2.compartments()]
     oddities_symbol = sum([o*(1 << (3*i)) for i,o in enumerate(oddities)])
     oddities_nbits = 3*len(s2.compartments())
-    bits += ZZ(oddities_symbol).digits(2, padto=oddities_nbits)
-
+    bits += ZZ(oddities_symbol).digits(2, padto=oddities_nbits)  
+    
     signs = [s2.canonical_symbol()[train[0]][2] for train in s2.trains()]
     bits += [ZZ(1-s) // 2 for s in signs]
 
     assert primes[0] == 2
     for p in primes[1:]:
         s = genus_sym.local_symbol(p)
-        signs = [t[2] for t in s.symbol_tuple_list()]
+        signs = [t[2] for t in s.symbol_tuple_list()]        
         bits += [ZZ(1-s) // 2 for s in signs]
-
+        
     local_data = sum([bits[i] << i for i in range(len(bits))])
     label = ".".join([str(x) for x in [rk,sig,det] + jordan_ranks + [hex(local_data)[2:]]])
     return label
 
 def decode_rank(c):
+    '''
+    Returns a number between 0 and 61, representing a rank of a component in the Jordan decomposition.
+    The number is represented by a character c using 0-9a-zA-Z.
+    
+    :param c: str
+    :return: int
+
+    >>> decode_rank('a')
+    10
+    
+    >>> decode_rank('A')
+    36
+
+    >>> decode_rank('9')
+    9
+    '''
     assert ((ord('0') <= ord(c) <= ord('9')) or (ord('a') <= ord(c) <= ord('z')) or (ord('A') <= ord(c) <= ord('Z')))
     if (ord('0') <= ord(c) <= ord('9')):
         return ord(c) - ord('0')
@@ -281,6 +332,62 @@ def decode_rank(c):
         return ord(c) - ord('a') + 10
     assert (ord('A') <= ord(c) <= ord('Z'))
     return ord(c) - ord('A') + 10 + 26
+
+def build_compartments_and_trains(symbols, num_blocks_2, compart_bits):
+    '''
+    Returns two lists of lists. 
+    The first list consists of compartments of the diadic symbol.
+    Here, each compartment is a maximal interval where all factors are of scaled type I.
+    The second list consists of a list of trains of the diadic symbol.
+    Here, each train is a maximal interval having the property that for each pair of adjacent forms
+    at least one is of scaled type I.
+
+    :param symbols: list
+    :param num_blocks_2: int
+    :param compart_bits: list
+    :return: tuple
+
+    '''
+    compartments = []
+    trains = []
+    in_compartment = False
+    train_start = 0
+    for i in range(num_blocks_2):
+        if i > 0:
+            scale_diff = symbols[0][i][0] - symbols[0][i-1][0]
+            if (scale_diff > 2) and (i > train_start):
+                trains.append([j for j in range(train_start,i)])
+                train_start = i
+            
+        if compart_bits[i] == 1:
+            if in_compartment:
+                if (i > 0) and (scale_diff > 1):
+                    compartments.append([j for j in range(compart_start, i)])
+                    compart_start = i
+            if not in_compartment:
+                compart_start = i
+                in_compartment = True
+                if (i > train_start) and (scale_diff > 1):
+                    trains.append([j for j in range(train_start,i)])
+                    train_start = i
+        else: # compart_bits[i] == 0
+            if in_compartment:
+                in_compartment = False
+                compartments.append([j for j in range(compart_start, i+1)])
+                if (i > train_start) and (scale_diff == 2):
+                    trains.append([j for j in range(train_start,i)])
+                    train_start = i
+            else:
+                if (i > train_start):
+                    trains.append([j for j in range(train_start,i)])
+                    train_start = i
+                
+    if in_compartment:
+        compartments.append([j for j in range(compart_start, num_blocks_2)])
+
+    trains.append([j for j in range(train_start, num_blocks_2)])
+    return compartments, trains
+
 
 def genus_symbol_from_label(label):
     '''
@@ -310,7 +417,7 @@ def genus_symbol_from_label(label):
     # initializing the symbol at 2
     symbols[0] = [s + [0,0] for s in symbols[0]]
     num_blocks_2 = len(symbols[0])
-
+    
     local_data = ZZ(split_label[3 + len(primes)], base=16)
 
     compart_bits = (local_data % (1 << num_blocks_2)).digits(2, padto=num_blocks_2)
@@ -318,54 +425,17 @@ def genus_symbol_from_label(label):
     for i in range(num_blocks_2):
         symbols[0][i][3] = compart_bits[i]
 
-    compartments = []
-    trains = []
-    in_compartment = False
-    train_start = 0
-    for i in range(num_blocks_2):
-        if i > 0:
-            scale_diff = symbols[0][i][0] - symbols[0][i-1][0]
-            if (scale_diff > 2) and (i > train_start):
-                trains.append([j for j in range(train_start,i)])
-                train_start = i
-
-        if compart_bits[i] == 1:
-            if in_compartment:
-                if (i > 0) and (scale_diff > 1):
-                    compartments.append([j for j in range(compart_start, i)])
-                    compart_start = i
-            if not in_compartment:
-                compart_start = i
-                in_compartment = True
-                if (i > train_start) and (scale_diff > 1):
-                    trains.append([j for j in range(train_start,i)])
-                    train_start = i
-        else: # compart_bits[i] == 0
-            if in_compartment:
-                in_compartment = False
-                compartments.append([j for j in range(compart_start, i+1)])
-                if (i > train_start) and (scale_diff == 2):
-                    trains.append([j for j in range(train_start,i)])
-                    train_start = i
-            else:
-                if (i > train_start):
-                    trains.append([j for j in range(train_start,i)])
-                    train_start = i
-
-    if in_compartment:
-        compartments.append([j for j in range(compart_start, num_blocks_2)])
-
-    trains.append([j for j in range(train_start, num_blocks_2)])
-
+    compartments, trains = build_compartments_and_trains(symbols, num_blocks_2, compart_bits)
+            
     local_data >>= num_blocks_2
-
+    
     oddity_bits = (local_data % (1 << (3*len(compartments)))).digits(2, padto=3*len(compartments))
 
     oddity_nums = [oddity_bits[3*i:3*(i+1)] for i in range(len(compartments))]
     oddities = [sum([(b[i] << i) for i in range(3)]) for b in oddity_nums]
 
     # updating oddities
-
+    
     for j,c in enumerate(compartments):
         symbols[0][c[0]][4] = oddities[j]
 
@@ -376,7 +446,7 @@ def genus_symbol_from_label(label):
     train_sign_bits = (local_data % (1 << len(trains))).digits(2, padto=len(trains))
 
     # updating signs at 2
-
+    
     for t,train in enumerate(trains):
         sign = (-1)**(train_sign_bits[t])
         symbols[0][train[0]][2] = 3 if sign == -1 else 1
@@ -392,3 +462,240 @@ def genus_symbol_from_label(label):
 
     local_symbols = [Genus_Symbol_p_adic_ring(p, symbols[j]) for j,p in enumerate(primes)]
     return GenusSymbol_global_ring((n_plus, n_minus), local_symbols)
+
+# This is based on the __repr__ method from local symbols
+# !! TODO !! - should refactor the code there and then use it
+
+def conway_symbol_diadic(local_symbol):
+    CS = local_symbol.canonical_symbol()
+    trains = local_symbol.trains()
+    comps = local_symbol.compartments()
+
+    # removing the 0-index in case we omit it
+        
+    if CS[0][0] == 0:
+        if trains[0] == [0]:
+            trains = trains[1:]
+        else:
+            trains = [trains[0][1:]] + trains[1:]
+            
+        if len(comps) > 0:
+            if comps[0] == [0]:
+                comps = comps[1:]
+            elif comps[0][0] == 0:
+                comps = [comps[0][1:]] + comps[1:]
+                
+            
+    for train in trains:
+        # mark the beginning of a train with a colon
+        CS_string += " :"
+        # collect the indices where compartments begin and end
+        compartment_begins = []
+        compartment_ends = []
+        for comp in comps:
+            compartment_begins.append(comp[0])
+            compartment_ends.append(comp[-1])
+
+        for block_index in train:
+            if block_index in compartment_begins:
+                # mark the beginning of this compartment with [
+                CS_string += "["
+            block = CS[block_index]
+            block_string = "%s^{%s}" % (p**block[0], block[2] * block[1])
+            CS_string += block_string
+            if block_index in compartment_ends:
+                # close this compartment with ]
+                CS_string += "]"
+                # the oddity belongs to the compartment
+                # and is saved in its first block
+                i = compartment_ends.index(block_index)
+                compartment_start = compartment_begins[i]
+                oddity = CS[compartment_start][4]
+                CS_string += "_%s" % oddity
+        # remove the first colon
+        CS_string = CS_string[2:]
+        # remove some unnecessary whitespace
+        CS_string = CS_string.replace("  :", ":")
+    return CS_string
+
+# Here we do not want the trains and compartments, for the global symbol
+def conway_symbol_local_part(local_symbol):
+    p = local_symbol.prime()
+    CS_string = ""
+    symbols = local_symbol.canonical_symbol()
+    if (p == 2) and (symbols[0][3] == 0):
+        oddities = [i for i,s in enumerate(symbols) if s[4] != 0]
+        if len(oddities) > 0:
+            last_idx = oddities[-1]
+            # we won't display the oddity when it can be inferred from the oddity formula
+            symbols[last_idx][4] = 0
+            
+    symbols = [s for s in symbols if s[0] > 0]
+    for s in symbols:
+        CS_string += "%s^{%s}" % (p**s[0], s[2] * s[1])
+        if (p == 2) and ((s[1] % 2 == 0) or (s[1] == 1)):
+            if s[3] == 0:
+                CS_string += "_{II}"
+            else:
+                if s[4] == 0:
+                    CS_string += "_{I}"
+                else:
+                    CS_string += "_{" + str(s[4]) + "}"
+    return CS_string
+
+def conway_symbol(genus_symbol):
+    '''
+    Returns the conway symbol string of the genus symbol.
+    '''
+    roman_numeral = "II" if genus_symbol.is_even() else  "I"
+    r,s = genus_symbol.signature_pair()
+    prefix = roman_numeral + "_{" + str(r) + "," + str(s) + "}"
+    local_part = "".join([conway_symbol_local_part(s) for s in genus_symbol.local_symbols()])
+    if len(local_part) > 0:
+        return prefix + "(" + local_part + ")"
+    return prefix
+
+def flat_mat(mat):
+    rows = [list(x) for x in mat.rows()]
+    return reduce(lambda x,y: x+y, rows,[])
+
+def create_genus_entry(genus_symbol, hecke_primes=[2]):
+    '''
+    Returns a dictionary with fields corresponding to the schema, 
+    and values populated by the genus symbol.
+    The list of hecke_primes determines for which primes we compute
+    the Hecke matrices and Hecke polynomials
+    '''
+    table_row = {}
+    table_row['label'] = create_genus_label(genus_symbol)
+    table_row['rank'] = genus_symbol.rank()
+    table_row['signature'] = genus_symbol.signature_pair()[0]
+    table_row['det'] = genus_symbol.determinant()
+    table_row['disc'] = table_row['det']
+    if (genus_symbol.is_even() and genus_symbol.rank() % 2 == 1):
+        table_row['disc'] *= 2
+    table_row['conway_symbol'] = conway_symbol(genus_symbol)
+    table_row['level'] = genus_symbol.level()
+    table_row['is_even'] = genus_symbol.is_even()
+    disc_form = genus_symbol.discriminant_form()
+    table_row['discriminant_group_invs'] = disc_form.invariants()
+    disc_q = disc_form.gram_matrix_quadratic()
+    den = disc_q.denominator()
+    table_row['discriminant_form'] = flat_mat(den*disc_q)
+    
+    # These operations are time consuming, and in high rank should be replaced by Noam's code
+    h = len(genus_symbol.representatives())
+    table_row['class_number'] = h
+
+    if genus_symbol.signature() == genus_symbol.rank():
+        mass = genus_symbol.mass()
+        table_row['mass'] = [mass.numerator(), mass.denominator()]
+    else:
+        table_row['mass'] = None
+    
+    lat = genus_symbol.representative()
+    hecke_mats = {}
+    hecke_polys = {}
+
+    if genus_symbol.signature() == genus_symbol.rank():
+        for p in hecke_primes:
+            hecke_mag = magma.AdjacencyMatrix(magma.Genus(magma.LatticeWithGram(lat)),p)
+            hecke_mats[p] = [ZZ(x) for x in list(magma.Eltseq(hecke_mag))]
+            hecke_mat = matrix(ZZ, h, h, hecke_mats[p])
+            hecke_poly_fac = list(hecke_mat.charpoly().factor())
+            hecke_polys[p] = [[fa[0].list(), fa[1]] for fa in hecke_poly_fac]
+        table_row['adjacency_matrix'] = hecke_mats
+        table_row['adjacency_polynomials'] = hecke_polys
+    else:
+        table_row['adjacency_matrix'] = None
+        table_row['adjacency_polynomials'] = None
+    
+    return table_row
+
+# The fields here are copied from the schema
+COL_TYPE_LATIICE_GENUS = {'label' : 'text',
+                          'rank'  : 'smallint',
+                          'signature' : 'smallint',
+                          'class_number' : 'smallint',
+                          'det' : 'bigint',
+                          'disc' : 'bigint',
+                          'conway_symbol' : 'text',
+                          'level' : 'bigint',
+                          'is_even' : 'boolean',
+                          'discriminant_group_invs' : 'integer[]',
+                          'discriminant_form' : 'integer[]',
+                          'adjacency_matrix' : 'jsonb',
+                          'adjacency_polynomials' : 'jsonb',
+                          'mass' : 'numeric[]'
+}
+
+def write_header_to_file(fname, sep = "|", col_type=COL_TYPE_LATIICE_GENUS):
+    # we want to have a well defined order, matching the entries
+    fields = sorted(list(col_type.keys()))
+
+    header_lines = [sep.join(fields), sep.join([col_type[k] for k in fields]), "\n"]
+    
+    header = "\n".join(header_lines)
+    
+    f = open(fname, "w")
+    f.write(header)
+    f.close()
+    return
+
+def value_to_postgres(val):
+    if type(val) == list:
+        return str(val).replace('[', '{').replace(']','}')
+    if type(val) == tuple:
+        return value_to_postgres(list(val))
+    if type(val) == str:
+        return '"' + val + '"'
+    if type(val) == dict:
+        d = {}
+        for k in val.keys():
+            d[str(k)] = val[k]
+        return str(d)
+    if type(val) == bool:
+        return "T" if val else "F"
+    return str(val)
+
+def write_entries_to_file(entries, fname, sep = "|", col_type=COL_TYPE_LATIICE_GENUS):
+    # we want to have a well defined order, matching the entries
+    fields = sorted(list(col_type.keys()))
+    lines = [sep.join([value_to_postgres(entry[k]) for k in fields]) for entry in entries]
+    output = "\n".join(lines)
+    f = open(fname, "a")
+    num = f.write(output)
+    if (num > 0):
+        f.write("\n")
+    f.close()
+    return
+
+def write_header_and_entries(entries, fname, sep = "|", col_type=COL_TYPE_LATIICE_GENUS):
+    write_header_to_file(fname, sep = sep, col_type=col_type)
+    write_entries_to_file(entries, fname, sep = sep, col_type=col_type)
+    return
+
+def write_all_of_sig_up_to_det(n_plus, n_minus, det):
+    '''
+    Create data file with all genera of a certain signature with determinant up to det.
+    '''
+    if not os.path.exists("data"):
+        os.makedirs("data")
+    fname = "data/genera_signature_%s_%s.tbl" % (n_plus, n_minus)
+    write_header_to_file(fname)
+    for d in range(1, det):
+        print("determinant = %s" % d)
+        syms = all_genus_symbols(n_plus, n_minus, d, is_even=False)
+        entries = [create_genus_entry(s) for s in syms]
+        write_entries_to_file(entries, fname)
+    return
+
+def write_all_up_to_det(rank, det):
+    '''
+    Create data files with all genera of a certain rank with determinant up to det.
+    '''
+    for n_minus in range(rank // 2 + 1):
+        n_plus = rank - n_minus
+        print("signature = (%s,%s)" %(n_plus, n_minus)) 
+        write_all_of_sig_up_to_det(n_plus, n_minus, det)
+    return
