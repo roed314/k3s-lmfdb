@@ -229,7 +229,7 @@ def create_genus_label(genus_sym):
     Label is in the format r.s.d.j_1.j_2....j_k.x, where 
     r is the rank of the lattices
     s is the signature (n_plus - n_minus)
-    d is the determinant
+    d is the absolute value of the determinant
     If p_1, ... , p_k are the primes whose squares divide 2*d (p_i^2 | 2*d), then
     j_1,...,j_k are corresponding rank decompositions of their Jordan forms, omitting the first, encoded in base 62
     (digits 0-9, then lowercase a-z then uppercase A-Z)
@@ -261,7 +261,7 @@ def create_genus_label(genus_sym):
     '''
     rk = genus_sym.rank()
     sig = genus_sym.signature()
-    det = genus_sym.determinant()
+    det = abs(genus_sym.determinant())
     primes = (2*det).prime_divisors()
     local_symbols = [genus_sym.local_symbol(p).symbol_tuple_list() for p in primes]
     local_symbols_filtered = [genus_sym.local_symbol(p).symbol_tuple_list() for p in primes if det.valuation(p) > 1]
