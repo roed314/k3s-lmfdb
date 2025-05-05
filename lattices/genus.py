@@ -525,12 +525,26 @@ def conway_symbol_dyadic(local_symbol):
 
 # Here we do not want the trains and compartments, for the global symbol
 def conway_symbol_local_part(local_symbol):
+    '''
+    Returns the part of the Conway symbol of the global genus symbol corresponding to the local symbol
+
+    :param local_symbol: Genus_Symbol_p_adic_ring
+    :return: str
+
+    >>> s2A = Genus_Symbol_p_adic_ring(2, [[0,2,1,0,0],[1,2,1,1,2],[3,2,1,1,0]])
+    >>> s2B = Genus_Symbol_p_adic_ring(2, [[0,2,1,0,0],[1,2,1,1,0],[3,2,1,1,2]])
+    >>> conway_symbol_local_part(s2A)
+    '2^{2}_{2}8^{2}_{I}'
+    >>> conway_symbol_local_part(s2B)
+    '2^{2}_{I}8^{2}_{2}'
+    '''
     p = local_symbol.prime()
     CS_string = ""
     symbols = local_symbol.canonical_symbol()[:]
     if (p == 2) and (symbols[0][3] == 0):
         oddities = [i for i,s in enumerate(symbols) if s[4] != 0]
-        if (len(oddities) > 1) or ((len(oddities) == 1) and len([s for s in symbols if s[3] == 1]) == 1):
+        zero_odd = len([s for s in symbols if (s[3] == 1) and (s[4] == 0)])
+        if (len(oddities) > 0) and (zero_odd == 0):
             last_idx = oddities[-1]
             # we won't display the oddity when it can be inferred from the oddity formula
             symbols[last_idx][4] = 0
