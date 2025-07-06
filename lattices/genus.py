@@ -1,15 +1,15 @@
 import os
 from functools import reduce
 
-from sage.arith.misc import kronecker, prime_divisors
-from sage.combinat.integer_vector_weighted import WeightedIntegerVectors
-from sage.interfaces.magma import magma
-from sage.matrix.constructor import matrix
-from sage.misc.functional import is_even, is_odd
-from sage.misc.misc_c import prod
-from sage.quadratic_forms.genera.genus import Genus_Symbol_p_adic_ring
-from sage.quadratic_forms.genera.genus import GenusSymbol_global_ring
-from sage.rings.integer_ring import ZZ
+from sage.arith.misc import kronecker, prime_divisors # type: ignore
+from sage.combinat.integer_vector_weighted import WeightedIntegerVectors # type: ignore
+from sage.interfaces.magma import magma # type: ignore
+from sage.matrix.constructor import matrix # type: ignore
+from sage.misc.functional import is_even, is_odd # type: ignore
+from sage.misc.misc_c import prod # type: ignore
+from sage.quadratic_forms.genera.genus import Genus_Symbol_p_adic_ring # type: ignore
+from sage.quadratic_forms.genera.genus import GenusSymbol_global_ring # type: ignore
+from sage.rings.integer_ring import ZZ # type: ignore
 
 def get_product(set_list):
     '''
