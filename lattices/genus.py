@@ -666,9 +666,10 @@ COL_TYPE_LATIICE_GENUS = {'label' : 'text',
                           'discriminant_group_invs' : 'integer[]',
                           'discriminant_form' : 'integer[]',
                           'rep' : 'integer[]', # We add this one as input for fill_genus.m
+                          'theta_prec' : 'integer',
                           #'adjacency_matrix' : 'jsonb',
                           #'adjacency_polynomials' : 'jsonb',
-                          #'mass' : 'numeric[]',
+                          'mass' : 'numeric[]',
 }
 
 def write_header_to_file(fname, sep = "|", col_type=COL_TYPE_LATIICE_GENUS):
@@ -701,7 +702,9 @@ def value_to_postgres(val):
 
 def write_entries_to_file(entries, fname, sep = "|", col_type=COL_TYPE_LATIICE_GENUS):
     # we want to have a well defined order, matching the entries
-    fields = sorted(list(col_type.keys()))
+    # fields = sorted(list(col_type.keys()))
+    with open("genera_basic.format") as f:
+        fields = f.read().split("|")
     lines = [sep.join([value_to_postgres(entry[k]) for k in fields]) for entry in entries]
     output = "\n".join(lines)
     f = open(fname, "a")
@@ -731,7 +734,7 @@ def write_all_of_sig_up_to_det(n_plus, n_minus, det):
 
 def write_all_of_sig_between(n_plus, n_minus, lb_det, ub_det):
     '''
-    Create data file with all genera of a certain signature with determinant up to det.
+    Create data file with all genera of a certain signature with determinant between lb_det and ub_det
     '''
     if not os.path.exists("data"):
         os.makedirs("data")
@@ -743,6 +746,22 @@ def write_all_of_sig_between(n_plus, n_minus, lb_det, ub_det):
         syms = all_genus_symbols(n_plus, n_minus, sgn*d, only_even=False)
         entries = [create_genus_entry(s) for s in syms]
         write_entries_to_file(entries, fname)
+
+def write_all_of_sig_between_genera_basic(n_plus, n_minus, lb_det, ub_det):
+    '''
+    Create data files with all genera of a certain signature with determinant between lb_det and ub_det,
+    one file for each genus
+    '''
+    if not os.path.exists("genera_basic"):
+        os.makedirs("genera_basic")
+    sgn = 1 if is_even(n_minus) else -1;
+    for d in range(lb_det, ub_det+1):
+        syms = all_genus_symbols(n_plus, n_minus, sgn*d, only_even=False)
+        entries = [create_genus_entry(s) for s in syms]
+        for genus in entries:
+            fname = "genera_basic/%s" % genus['label']
+            write_entries_to_file([genus], fname)
+
 
 def write_all_up_to_det(rank, det):
     '''
