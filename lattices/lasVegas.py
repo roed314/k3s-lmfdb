@@ -678,8 +678,9 @@ def dubeyHolensteinLatticeRepresentative(globalGenus, check=False, superDumbChec
         assert is_GlobalGenus(globalGenus)
 
     #check cache
-    if genusKey(globalGenus) in cache:
-        return cache[genusKey(globalGenus)]
+    if not (cache is None):
+        if genusKey(globalGenus) in cache:
+            return cache[genusKey(globalGenus)]
 
     n = globalGenus.dimension()
     det = globalGenus.determinant()
@@ -735,7 +736,8 @@ def dubeyHolensteinLatticeRepresentative(globalGenus, check=False, superDumbChec
 
     assert Genus(returnMatrix) == globalGenus, f"Bad output. Generated representative's genus:\n{Genus(returnMatrix)}\n...versus input genus:\n{globalGenus}"
     
-    cache[genusKey(globalGenus)] = returnMatrix #update to cache
+    if not (cache is None):
+        cache[genusKey(globalGenus)] = returnMatrix #update to cache
     return returnMatrix
 
 if __name__ == "__main__":
