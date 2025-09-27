@@ -7,6 +7,7 @@ import time
 
 import os
 from functools import reduce
+from line_profiler import LineProfiler
 
 from sage.arith.misc import kronecker, prime_divisors, inverse_mod, factor
 from sage.arith.functions import LCM_list
@@ -31,26 +32,27 @@ from sage.rings.finite_rings.finite_field_constructor import GF
 from sage.structure.factorization_integer import IntegerFactorization
 from sage.quadratic_forms.genera.normal_form import p_adic_normal_form
 from sage.matrix.constructor import zero_matrix
-from random import randint
+from random import randint, choice
 from math import prod
 from itertools import product
 
-def compare(testCases):
+def dhTest(testCases):
     print("Dubey Holenstein algorithm start.")
     cache = {}
     start = time.time()
     for i, test in enumerate(testCases):
-        lasVegas.dubeyHolensteinLatticeRepresentative(test, check=False,superDumbCheck=False,cache=cache)
+        print(lasVegas.dubeyHolensteinLatticeRepresentative(test, check=False,superDumbCheck=False,cache=cache))
         if i%5 == 4:
             print(f"{i+1} of {len(testCases)} done.")
     end = time.time()
     print(f"Dubey Holenstein algorithm complete in {round(end-start, 2)} seconds.")
     print(f"Cache size: {len(cache)}")
 
+def sageTest(testCases):
     print("Sage algorithm start.")
     start = time.time()
     for i, test in enumerate(testCases):
-        test.representative()
+        print(test.representative())
         if i%5 == 4:
             print(f"{i+1} of {len(testCases)} done.")
     end = time.time()
@@ -66,24 +68,54 @@ def cut(testCases, targetSize):
         gap = len(testCases)//targetSize
         return [testCases[i*gap] for i in range(targetSize)]
 
-if __name__ == "__main__":
-    signaturePair = (ZZ(6),ZZ(6))
-    det = 2**7 * 17**4 * 23**3
-    testCases = genus.all_genus_symbols(signaturePair[0], signaturePair[1], det)
-    print(f"Loaded {len(testCases)} symbols with determinant {factor(det)} and signature {signaturePair}.")
-    actualTests = cut(testCases,40)
-    compare(actualTests)
+def getRandomSymbol(det, rank):
+    if det < 0:
+        n_minus = 1
+        n_plus = rank-1
+    else:
+        n_minus = 0
+        n_plus = rank
+    primes = ZZ(2*det).prime_divisors()
+    odd_primes = primes[1:]
+    global_symbs = []
+    symbList = []
+    for p in odd_primes:
+        possibilities = genus.all_local_genus_symbols(rank, det, p)
+        assert len(possibilities) > 0, f"no symbols at p={p}"
+        symbList.append(choice(possibilities))
     
-    # test = lasVegas.genusFromSymbolLists((12,6), [(2,[[0, 10, 3, 0, 0], [1, 8, 3, 1, 2]]),
-    #                                               (17,[[0, 12, -1], [1, 6, -1]]),
-    #                                               (23,[[0, 14, -1], [1, 4, -1]])])
+    dyadic = genus.all_dyadic_genus_symbols(n_plus, n_minus, det, symbList, only_even=True)
+    assert len(dyadic) > 0, f"no symbols at p=2"
+    symbList.insert(0,choice(dyadic))
+    return GenusSymbol_global_ring((n_plus, n_minus), symbList)
 
-    # # assert is_GlobalGenus(test), f"Test case of:\n{test}is not even a valid genus!"
-    # print(f"Symbols:\n{"\n".join([str(i.symbol_tuple_list()) for i in test.local_symbols()])}")
-    # print(f"Signature: {test.signature_pair()}")
-    # print("Sage algorithm start")
-    # assert(Genus(test.representative()) == test)
-    # print("Sage algorithm end")
-    # print("Dubey Holenstein start")
-    # print(f"Representative:\n{lasVegas.dubeyHolensteinLatticeRepresentative(test,check = False,superDumbCheck = False)}\n______")
+def dhTimeProfile(method, globalGenus):
+    lp = LineProfiler()
+    lp.add_function(method)
+    lp_wrapper = lp(lasVegas.dubeyHolensteinLatticeRepresentative)
+    lp_wrapper(globalGenus)
+    lp.print_stats()
+
+
+
+def printbar():
+    print("___________________\n")
+
+
+
+if __name__ == "__main__":
+    signaturePair = (ZZ(30),ZZ(6))
+    det = 2**3*100000007**3
+    # testCases = genus.all_genus_symbols(signaturePair[0], signaturePair[1], det)
+    # print(f"Loaded {len(testCases)} symbols with determinant {factor(det)} and signature {signaturePair}.")
+    actualTests = [getRandomSymbol(det, 10)]
+    print(lasVegas.symbolList(actualTests[0]))
+    printbar()
+
+    #run tests
+    sageTest(actualTests)
+    printbar()
+    dhTest(actualTests)
+
+    # dhTimeProfile(lasVegas.computeChangeOfVariables, actualTests[0])
     

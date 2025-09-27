@@ -27,7 +27,7 @@ from itertools import product
 from sage.env import SAGE_EXTCODE
 
 def symbolList(globalGenus):
-    return "\n".join([f"({i.prime()},\t{i.symbol_tuple_list()})," for i in globalGenus.local_symbols()])
+    return ("\n".join([f"({i.prime()},\t{i.symbol_tuple_list()})," for i in globalGenus.local_symbols()]))[:-1]
 def genusFromSymbolLists(signaturePair, tupleLists):
     """tupleLists: list of pairs (p, tupleList)"""
     return GenusSymbol_global_ring(signaturePair, [Genus_Symbol_p_adic_ring(i[0], i[1]) for i in tupleLists])
@@ -37,6 +37,8 @@ def genusKey(globalGenus):
 def matrix_entries_gcd(M):
     entries = [abs(int(e)) for e in M.list() if e != 0]
     return reduce(gcd, entries, 0)
+def genusOrder(globalGenus):
+    return prod([i.prime()**i.symbol_tuple_list()[-1][0] for i in globalGenus.local_symbols()])
 
 def makeSmall(L, signaturePair=None):
     """does LLL on the matrix L of integers
@@ -684,6 +686,8 @@ def dubeyHolensteinLatticeRepresentative(globalGenus, check=False, superDumbChec
     reducedGenus, gcdOfGenus = reduceGenus(globalGenus)
     if check:
         assert is_GlobalGenus(reducedGenus)
+    # print(factor(genusOrder(reducedGenus)))
+    # print(reducedGenus.determinant())
 
     det = reducedGenus.determinant()
     t,q,representations = primitivelyRepresentedTWithRepresentations(reducedGenus)
@@ -730,6 +734,26 @@ def dubeyHolensteinLatticeRepresentative(globalGenus, check=False, superDumbChec
     if not (cache is None):
         cache[genusKey(globalGenus)] = returnMatrix #update to cache
     return returnMatrix
+
+def removeTrivialTerms(globalGenus):
+    """if the forms start with a bunch of diagonal terms, we can delete them from every symbol and add them at the end"""
+    localSyms = globalGenus.local_symbols()
+    n_plus = globalGenus.signature_pair()[0]
+    n_minus = globalGenus.signature_pair()[1]
+    availableTerms = []
+    for i in localSyms:
+        firstTuple = i.symbol_tuple_list()[0]
+        if i[0] != 0: #no p^0 constituent altogether
+            continue
+        if i.prime() != 2:
+            availableTerms.append(i[1]-2) #not bothered enough to try optimizing further than this
+        else:
+            availableTerms.append(i[1])
+    numTermsCut = min(availableTerms)
+    if n_plus == 0 and numTermsCut%2==1: #we only have negative terms
+        numTermsCut -= 1
+    diagonalEntries = []
+    return
 
 if __name__ == "__main__":
     #TEST IF FUNCTION WORKS
