@@ -29,12 +29,11 @@ function satspan(v, A)
     v_mat := Matrix(v);
     d := Denominator(v_mat);
     dv_mat := ChangeRing(d*v_mat, Integers());
-    // hnf_mat := VerticalJoin(dv_mat, d*IdentityMatrix(Integers(),Ncols(v_mat)));
-    H := HermiteForm(dv_mat);
-    H_basis := [Vector(r) : r in Rows(H)[1..Rank(H)]];
-    sat_basis := 
-	ChangeRing(Matrix([GCD(Eltseq(v))^(-1) * ChangeRing(v,Rationals()) 
-			   : v in H_basis]), Rationals());
+    S, X, Y := SmithForm(dv_mat);
+    one := IdentityMatrix(Integers(), Nrows(S));
+    zero := ZeroMatrix(Integers(), Nrows(S), Ncols(S)-Nrows(S));
+    B := HorizontalJoin(one, zero);
+    sat_basis := ChangeRing(X^(-1)*B*Y^(-1), Rationals());
     return Lattice(sat_basis, A);
 end function;
 
@@ -84,6 +83,8 @@ function V_cvp(A : max_num := Infinity())
 	return minA;
     end if;
     L1 := satspan(Basis(LminA), A);
+    assert LminA subset L1;
+    assert IsFree(L/L1); // verifying L1 is saturated
     B1 := ChangeRing(Matrix(Basis(L1)),Rationals());
     A1 := B1 * A * Transpose(B1);
     B2 := Transpose(Matrix(Basis(Kernel(A*Transpose(B1)))));
@@ -269,13 +270,25 @@ intrinsic CanonicalForm(A::AlgMatElt) -> AlgMatElt
     L, T := LLL(LatticeWithGram(A : CheckPositive := false));
     Ared := GramMatrix(L);
     assert T*A*Transpose(T) eq Ared;
-    U, Ared, is_dual, Td := U_V(Ared);
-    can_A := Transpose(U)*Ared*U;
+    U, Ad, is_dual, Td := U_V(Ared);
+    can_A := Transpose(U)*Ad*U;
     if is_dual then
-      can_Ad := Determinant(can_A)*can_A^(-1);
-      Ud := U^(-1)*Transpose(Td)^(-1)*T;
-      can_A := can_Ad;
-      U := Ud;
+      Ared := ChangeRing(Ared, Rationals());
+      GrauA := ChangeRing(A, Rationals());
+      assert Ad eq Td*Determinant(Ared)*Ared^(-1)*Transpose(Td);
+      U1 := Transpose(U)*Td;
+      Aredd := Determinant(Ared)*Ared^(-1);
+      assert can_A eq U1*Aredd*Transpose(U1);
+      assert Aredd eq Determinant(T)^2*Determinant(A)*Transpose(T)^(-1)*A^(-1)*T^(-1);
+      U2 := U1*Transpose(T)^(-1);
+      D := Determinant(T)^2*Determinant(A);
+      Ainv := D*A^(-1);
+      assert can_A eq U2*Ainv*Transpose(U2);
+      U3 := Transpose(U2)^(-1);
+      assert can_A^(-1) eq U3*Ainv^(-1)*Transpose(U3);
+      assert D*can_A^(-1) eq U3*A*Transpose(U3);
+      can_A := D*can_A^(-1);
+      U := U3;
     else
       U := Transpose(U)*T;
     end if;
