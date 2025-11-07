@@ -1,11 +1,13 @@
-// run in top directory
-Attach("canonical_form.m");
 import "canonical_form.m" : test_canonical, num_V;
-load "tests/L12a+.m";
-nums := [num_V(A) : A in L12a]; // takes a long while
-/*
-[ 484, 304, 556, 508, 516, 2556, 33252, 998, 1332, 278, 1068, 1868, 5248, 8256,
-1186, 224, 1454, 3332, 13410, 998, 86546, 332, 458, 690, 676, 500, 174, 670, 
-572, 368, 430, 676, 886, 890, 248, 2556, 502, 820, 654, 272, 332, 240, 348, 
-676, 524, 232, 146, 252, 328, 376, 228, 656, 656 ] 
-*/
+import "tests/_L12a+.m" : L12a;
+// This is still impossible because some of these lattices have
+// characteristic vector sets that are too large.
+// time cans := [CanonicalForm(A) : A in L12a];
+nums := [num_V(ChangeRing(A,Rationals())) : A in L12a]; // time: 103.530
+assert nums eq [ 484, 304, 356, 122, 276, 2556, 33252, 742, 894, 278, 308, 1868, 4544, 8256, 222, 220, 618, 1186, 13410, 742, 484, 332, 206, 58, 676, 248, 164, 197, 886, 118, 454, 164, 240, 246, 216, 2556, 502, 820, 499, 272, 58, 240, 348, 204, 258, 232, 142, 110, 56, 276, 106, 438, 656 ];
+
+good_idxs := [j : j in [1..#nums] | nums[j] le 8000];
+// last 3 lattices that we need to take care of
+bad_idxs := [j : j in [1..#nums] | nums[j] gt 8000];
+assert #bad_idxs eq 3;
+time cans := [CanonicalForm(L12a[j]) : j in good_idxs];
