@@ -1,15 +1,15 @@
 import os
 from functools import reduce
 
-from sage.arith.misc import kronecker, prime_divisors
-from sage.combinat.integer_vector_weighted import WeightedIntegerVectors
-from sage.interfaces.magma import magma
-from sage.matrix.constructor import matrix
-from sage.misc.functional import is_even, is_odd
-from sage.misc.misc_c import prod
-from sage.quadratic_forms.genera.genus import Genus_Symbol_p_adic_ring
-from sage.quadratic_forms.genera.genus import GenusSymbol_global_ring
-from sage.rings.integer_ring import ZZ
+from sage.arith.misc import kronecker, prime_divisors # type: ignore
+from sage.combinat.integer_vector_weighted import WeightedIntegerVectors # type: ignore
+from sage.interfaces.magma import magma # type: ignore
+from sage.matrix.constructor import matrix # type: ignore
+from sage.misc.functional import is_even, is_odd # type: ignore
+from sage.misc.misc_c import prod # type: ignore
+from sage.quadratic_forms.genera.genus import Genus_Symbol_p_adic_ring # type: ignore
+from sage.quadratic_forms.genera.genus import GenusSymbol_global_ring # type: ignore
+from sage.rings.integer_ring import ZZ # type: ignore
 
 def get_product(set_list):
     '''
@@ -490,7 +490,7 @@ def conway_symbol_dyadic(local_symbol):
             elif comps[0][0] == 0:
                 comps = [comps[0][1:]] + comps[1:]
 
-
+    CS_string = ""
     for train in trains:
         # mark the beginning of a train with a colon
         CS_string += " :"
@@ -525,12 +525,26 @@ def conway_symbol_dyadic(local_symbol):
 
 # Here we do not want the trains and compartments, for the global symbol
 def conway_symbol_local_part(local_symbol):
+    '''
+    Returns the part of the Conway symbol of the global genus symbol corresponding to the local symbol
+
+    :param local_symbol: Genus_Symbol_p_adic_ring
+    :return: str
+
+    >>> s2A = Genus_Symbol_p_adic_ring(2, [[0,2,1,0,0],[1,2,1,1,2],[3,2,1,1,0]])
+    >>> s2B = Genus_Symbol_p_adic_ring(2, [[0,2,1,0,0],[1,2,1,1,0],[3,2,1,1,2]])
+    >>> conway_symbol_local_part(s2A)
+    '2^{2}_{2}8^{2}_{I}'
+    >>> conway_symbol_local_part(s2B)
+    '2^{2}_{I}8^{2}_{2}'
+    '''
     p = local_symbol.prime()
     CS_string = ""
-    symbols = local_symbol.canonical_symbol()
+    symbols = local_symbol.canonical_symbol()[:]
     if (p == 2) and (symbols[0][3] == 0):
         oddities = [i for i,s in enumerate(symbols) if s[4] != 0]
-        if len(oddities) > 0:
+        zero_odd = len([s for s in symbols if (s[3] == 1) and (s[4] == 0)])
+        if (len(oddities) > 0) and (zero_odd == 0):
             last_idx = oddities[-1]
             # we won't display the oddity when it can be inferred from the oddity formula
             symbols[last_idx][4] = 0
@@ -651,9 +665,11 @@ COL_TYPE_LATIICE_GENUS = {'label' : 'text',
                           'is_even' : 'boolean',
                           'discriminant_group_invs' : 'integer[]',
                           'discriminant_form' : 'integer[]',
+                          'rep' : 'integer[]', # We add this one as input for fill_genus.m
+                          'theta_prec' : 'integer',
                           #'adjacency_matrix' : 'jsonb',
                           #'adjacency_polynomials' : 'jsonb',
-                          #'mass' : 'numeric[]',
+                          'mass' : 'numeric[]',
 }
 
 def write_header_to_file(fname, sep = "|", col_type=COL_TYPE_LATIICE_GENUS):
@@ -674,7 +690,8 @@ def value_to_postgres(val):
     if type(val) == tuple:
         return value_to_postgres(list(val))
     if type(val) == str:
-        return '"' + val + '"'
+        # return '"' + val + '"'
+        return val
     if type(val) == dict:
         d = {}
         for k in val.keys():
@@ -686,7 +703,9 @@ def value_to_postgres(val):
 
 def write_entries_to_file(entries, fname, sep = "|", col_type=COL_TYPE_LATIICE_GENUS):
     # we want to have a well defined order, matching the entries
-    fields = sorted(list(col_type.keys()))
+    # fields = sorted(list(col_type.keys()))
+    with open("genera_basic.format") as f:
+        fields = f.read().split("|")
     lines = [sep.join([value_to_postgres(entry[k]) for k in fields]) for entry in entries]
     output = "\n".join(lines)
     f = open(fname, "a")
@@ -713,6 +732,37 @@ def write_all_of_sig_up_to_det(n_plus, n_minus, det):
         syms = all_genus_symbols(n_plus, n_minus, sgn*d, only_even=False)
         entries = [create_genus_entry(s) for s in syms]
         write_entries_to_file(entries, fname)
+
+def write_all_of_sig_between(n_plus, n_minus, lb_det, ub_det):
+    '''
+    Create data file with all genera of a certain signature with determinant between lb_det and ub_det
+    '''
+    if not os.path.exists("data"):
+        os.makedirs("data")
+    fname = "data/genera_signature_%s_%s_%s_%s.tbl" % (n_plus, n_minus, lb_det, ub_det)
+    write_header_to_file(fname)
+    sgn = 1 if is_even(n_minus) else -1;
+    for d in range(lb_det, ub_det+1):
+        # print("determinant = %s" % (sgn*d))
+        syms = all_genus_symbols(n_plus, n_minus, sgn*d, only_even=False)
+        entries = [create_genus_entry(s) for s in syms]
+        write_entries_to_file(entries, fname)
+
+def write_all_of_sig_between_genera_basic(n_plus, n_minus, lb_det, ub_det):
+    '''
+    Create data files with all genera of a certain signature with determinant between lb_det and ub_det,
+    one file for each genus
+    '''
+    if not os.path.exists("genera_basic"):
+        os.makedirs("genera_basic")
+    sgn = 1 if is_even(n_minus) else -1;
+    for d in range(lb_det, ub_det+1):
+        syms = all_genus_symbols(n_plus, n_minus, sgn*d, only_even=False)
+        entries = [create_genus_entry(s) for s in syms]
+        for genus in entries:
+            fname = "genera_basic/%s" % genus['label']
+            write_entries_to_file([genus], fname)
+
 
 def write_all_up_to_det(rank, det):
     '''
