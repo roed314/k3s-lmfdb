@@ -99,7 +99,13 @@ for L in reps do
     lat["dual_theta_series"] := Eltseq(ThetaSeries(D, prec - 1));
     // Need dual_label, dual_conway
     // Compute festi_veniani_index in Sage?
-    // Need label for lattice.
+    // Need label for lattice.  Don't want the label to rely on a difficult computation.  So we should probably avoid using the canonical form, and maybe avoid the automorphism group.
+    // Proposal: Sort lexicographically by:
+    // 1. Size of automorphism group (larger first): unfortunately this may be hard to compute
+    // 2. Density
+    // 3. theta series
+    // 4. dual theta series
+    // 5. arbitrary tiebreaker
     Append(~lats, lat);
 end for;
 

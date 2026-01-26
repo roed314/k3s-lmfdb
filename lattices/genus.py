@@ -5,8 +5,11 @@ from sage.rings.integer_ring import ZZ
 from sage.combinat.integer_vector_weighted import WeightedIntegerVectors
 from sage.arith.misc import prime_divisors
 from sage.misc.misc_c import prod
-from sage.quadratic_forms.genera.genus import Genus_Symbol_p_adic_ring
-from sage.quadratic_forms.genera.genus import GenusSymbol_global_ring
+from sage.quadratic_forms.genera.genus import (
+    GenusSymbol_global_ring,
+    Genus_Symbol_p_adic_ring,
+    LocalGenusSymbol,
+)
 from sage.interfaces.magma import magma
 from sage.matrix.constructor import matrix
 
@@ -571,18 +574,25 @@ def create_genus_entry(genus_symbol):
     table_row['conway_symbol'] = conway_symbol(genus_symbol)
     table_row['level'] = level = genus_symbol.level()
     table_row['is_even'] = genus_symbol.is_even()
-    disc_form = genus_symbol.discriminant_form()
+    disc_form = genus_symbol.discriminant_form() # Timing: this was slow
     table_row['discriminant_group_invs'] = disc_form.invariants()
     disc_q = disc_form.gram_matrix_quadratic()
     den = disc_q.denominator()
     table_row['discriminant_form'] = (den*disc_q).list()
     if genus_symbol.signature() == genus_symbol.rank():
-        mass = genus_symbol.mass()
+        mass = genus_symbol.mass() # Timing: this was slow
         table_row['mass'] = [mass.numerator(), mass.denominator()]
     else:
         table_row['mass'] = None
     # We store a representative for use by the magma code
-    table_row['rep'] = genus_symbol.representative().list()
+    rep = genus_symbol.representative()
+    table_row['rep'] = rep.list() # Timing: this was slow
+    dual = rep**(-1)
+    dual = (dual.denominator() * dual).change_ring(ZZ)
+    ddet = dual.det()
+    dual_local_symbols = [LocalGenusSymbol(dual, p) for p in (2*ddet).prime_divisors()]
+    dual_symbol = GenusSymbol_global_ring(genus_symbol.signature_pair(), dual_local_symbols, representative=dual)
+    table_row['dual_conway'] = conway_symbol(dual_symbol)
     table_row['theta_prec'] = 150 # Every trace_bound currently in the LMFDB of Gamma0(N) or Gamma(N,chi) for chi a quadratic character has trace bound less than 150.
 
     # sage: list(db.mf_newspaces.search({"trace_bound":{"$gte":100}}, ["label", "trace_bound"]))
