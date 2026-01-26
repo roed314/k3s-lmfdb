@@ -92,38 +92,53 @@ procedure fill_genus(label)
         D := Dual(L);
         lat["dual_det"] := Determinant(D);
         gram := GramMatrix(L);
-        // lat["gram"] := Eltseq(gram);
-        // The following might hang - check when, why and if we can get around it...
-        lat["gram"] := Eltseq(CanonicalForm(gram));
-        // Add canonical gram matrix
-        // Any systematic way of producing names, or are we doing it manually?
-        // The following might hang - check when and can we get around it...
-        A := AutomorphismGroup(L);
-        lat["aut_size"] := #A;
-        lat["festi_veniani_index"] := disc_aut_size div #A;
-        if CanIdentifyGroup(#A) then
-            Aid := IdentifyGroup(A);
-            lat["aut_label"] := Sprintf("%o.%o", Aid[1], Aid[2]);
+        if (n eq s) then 
+            lat["gram"] := Eltseq(CanonicalForm(gram));
+            A := AutomorphismGroup(L);
+            lat["aut_size"] := #A;
+            lat["festi_veniani_index"] := disc_aut_size div #A;
+            if CanIdentifyGroup(#A) then
+                Aid := IdentifyGroup(A);
+                lat["aut_label"] := Sprintf("%o.%o", Aid[1], Aid[2]);
+            else
+                lat["aut_label"] := "\\N";
+            end if;
+            // This one needs David's code
+            // lat["aut_group"] := GroupToString(A : use_id:=false);
+            lat["aut_group"] := "\\N"; 
+            lat["density"] := Density(L);
+            lat["dual_density"] := Density(D);
+            lat["hermite"] := HermiteNumber(L);
+            lat["dual_hermite"] := HermiteNumber(D);
+            lat["kissing"] := KissingNumber(L);
+            lat["dual_kissing"] := KissingNumber(D);
+            m := Minimum(L);
+            lat["minimum"] := m;
+            prec := Max(StringToInteger(basics["theta_prec"]), m+4);
+            lat["theta_series"] := AbsEltseq(ThetaSeries(L, prec - 1));
+            lat["theta_prec"] := prec;
+            lat["dual_theta_series"] := AbsEltseq(ThetaSeries(D, prec - 1));
         else
+            lat["gram"] := Eltseq(gram);
+            // !!!  TODO - Need to be able to compute the automorphism group for non-definite lattices
+            lat["aut_size"] := "\\N";
+            lat["festi_veniani_index"] := "\\N";
             lat["aut_label"] := "\\N";
+            lat["aut_group"] := "\\N";
+            lat["density"] := "\\N";
+            lat["dual_density"] := "\\N";
+            lat["hermite"] := "\\N";
+            lat["dual_hermite"] := "\\N";
+            lat["kissing"] := "\\N";
+            lat["dual_kissing"] := "\\N";
+            lat["minimum"] := "\\N";
+            lat["theta_series"] := "\\N";
+            lat["theta_prec"] := "\\N";
+            lat["dual_theta_series"] := "\\N";
         end if;
-        // This one needs David's code
-        // lat["aut_group"] := GroupToString(A : use_id:=false);
-        lat["aut_group"] := "\\N";
-        lat["festi_veniani_index"] := "\\N";
-        lat["density"] := Density(L);
-        lat["dual_density"] := Density(D);
-        lat["hermite"] := HermiteNumber(L);
-        lat["dual_hermite"] := HermiteNumber(D);
-        lat["kissing"] := KissingNumber(L);
-        lat["dual_kissing"] := KissingNumber(D);
-        lat["level"] := Level(L);
-        m := Minimum(L);
-        lat["minimum"] := m;
-        prec := Max(StringToInteger(basics["theta_prec"]), m+4);
-        lat["theta_series"] := AbsEltseq(ThetaSeries(L, prec - 1));
-        lat["theta_prec"] := prec;
-        lat["dual_theta_series"] := AbsEltseq(ThetaSeries(D, prec - 1));
+        
+        lat["level"] := Level(LatticeWithGram(ChangeRing(GramMatrix(L), Integers()) : CheckPositive:=false));
+        
         // Need dual_label, dual_conway
         // Compute festi_veniani_index in Sage?
         
@@ -131,7 +146,6 @@ procedure fill_genus(label)
         lat["genus_label"] := basics["label"];
         lat["conway_symbol"] := basics["conway_symbol"];
         Append(~lats, lat);
-        
     end for;
 
     function cmp_lat(L1, L2)
@@ -151,7 +165,9 @@ procedure fill_genus(label)
 
     // Tie breaker
     // TODO: Sort reps according to canonical form?
-    lats := Sort(lats, cmp_lat);
+    if (n eq s) then
+        lats := Sort(lats, cmp_lat);
+    end if;
 
     for idx->L in lats do
         // Need label for lattice.
