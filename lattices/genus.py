@@ -1,17 +1,19 @@
 import os
 from functools import reduce
 
-from sage.rings.integer_ring import ZZ
-from sage.combinat.integer_vector_weighted import WeightedIntegerVectors
-from sage.arith.misc import prime_divisors
-from sage.misc.misc_c import prod
+from sage.arith.misc import kronecker, prime_divisors # type: ignore
+from sage.combinat.integer_vector_weighted import WeightedIntegerVectors # type: ignore
+from sage.interfaces.magma import magma # type: ignore
+from sage.matrix.constructor import matrix # type: ignore
+from sage.misc.functional import is_even, is_odd # type: ignore
+from sage.misc.misc_c import prod # type: ignore
 from sage.quadratic_forms.genera.genus import (
     GenusSymbol_global_ring,
     Genus_Symbol_p_adic_ring,
     LocalGenusSymbol,
-)
-from sage.interfaces.magma import magma
-from sage.matrix.constructor import matrix
+) # type: ignore
+from sage.quadratic_forms.genera.genus import GenusSymbol_global_ring # type: ignore
+from sage.rings.integer_ring import ZZ # type: ignore
 
 def get_product(set_list):
     '''
@@ -121,7 +123,7 @@ def get_unique(symbs):
         symb_dict[tuple(listify_symbol(s))] = i
     return [symbs[i] for i in symb_dict.values()]
 
-def all_diadic_genus_symbols(n_plus, n_minus, det, odd_symbols, is_even=True):
+def all_dyadic_genus_symbols(n_plus, n_minus, det, odd_symbols, only_even=True):
     '''
     Returns all the possible 2-adic genus symbols of a global genus symbol having a signature (n_plus, m_minus),
     determinant det and p-adic genus symbols odd_symbols at the odd primes p dividing the determinant
@@ -146,7 +148,7 @@ def all_diadic_genus_symbols(n_plus, n_minus, det, odd_symbols, is_even=True):
             comps = []
             for block in blocks:
                 oddities = []
-                if (block[0] == 0) and is_even:
+                if (block[0] == 0) and only_even:
                     # if the scaling is trivial and we want an even lattice, we cannot have any oddity
                     oddities = [[0,0]]
                 elif block[1] == 1:
@@ -169,18 +171,18 @@ def all_diadic_genus_symbols(n_plus, n_minus, det, odd_symbols, is_even=True):
                 if (oddity(cmps) - exp_oddity) % 8 == 0:
                     symbs.append(cmps)
     gen_symbs = [Genus_Symbol_p_adic_ring(p,symb) for symb in symbs]
-    if is_even:
+    if only_even:
         assert all([s.is_even() for s in gen_symbs])
     return get_unique(gen_symbs)
 
-def all_genus_symbols(n_plus, n_minus, det, is_even=True):
+def all_genus_symbols(n_plus, n_minus, det, only_even=True):
     '''
     Returns all the genus symbols of even lattices with signature (n_plus, n_minus) and determinant det
 
     :param n_plus: int
     :param n_minus: int
     :param det: int
-    :param is_even: bool
+    :param only_even: bool
     :return: list
 
     >>> all_genus_symbols(16,0,1)
@@ -189,7 +191,7 @@ def all_genus_symbols(n_plus, n_minus, det, is_even=True):
     Signature:  (16, 0)
     Genus symbol at 2:    1^16]
 
-    >>> all_genus_symbols(16,0,1,is_even=False)
+    >>> all_genus_symbols(16,0,1,only_even=False)
     [Genus of
     None
     Signature:  (16, 0)
@@ -205,14 +207,18 @@ def all_genus_symbols(n_plus, n_minus, det, is_even=True):
     >>> [len(all_genus_symbols(17,0,2*D)) for D in range(1,10)]
     [1, 1, 1, 3, 1, 2, 1, 3, 3]
     '''
+    if is_odd(n_minus) and (det > 0):
+        return []
+    if is_even(n_minus) and (det < 0):
+        return []
     rank = n_plus + n_minus
     primes = ZZ(2*det).prime_divisors()
     odd_primes = primes[1:]
     global_symbs = []
     odd_symbs = get_product([all_local_genus_symbols(rank, det, p) for p in odd_primes])
     for odd_symbols in odd_symbs:
-        diadic = all_diadic_genus_symbols(n_plus, n_minus, det, odd_symbols, is_even=is_even)
-        for symb2 in diadic:
+        dyadic = all_dyadic_genus_symbols(n_plus, n_minus, det, odd_symbols, only_even=only_even)
+        for symb2 in dyadic:
             g = GenusSymbol_global_ring((n_plus, n_minus), [symb2] + odd_symbols)
             global_symbs.append(g)
     return global_symbs
@@ -258,7 +264,7 @@ def create_genus_label(genus_sym):
     >>> create_genus_label(s)
     '5.5.122.66'
 
-    >>> s = all_genus_symbols(8,0,2**5*3**4*5**3*7**2,is_even=False)[0]
+    >>> s = all_genus_symbols(8,0,2**5*3**4*5**3*7**2,only_even=False)[0]
     >>> create_genus_label(s)
     '8.8.15876000.00001.0001.001.01.a267'
     '''
@@ -339,9 +345,9 @@ def decode_rank(c):
 def build_compartments_and_trains(symbols, num_blocks_2, compart_bits):
     '''
     Returns two lists of lists. 
-    The first list consists of compartments of the diadic symbol.
+    The first list consists of compartments of the dyadic symbol.
     Here, each compartment is a maximal interval where all factors are of scaled type I.
-    The second list consists of a list of trains of the diadic symbol.
+    The second list consists of a list of trains of the dyadic symbol.
     Here, each train is a maximal interval having the property that for each pair of adjacent forms
     at least one is of scaled type I.
 
@@ -399,7 +405,7 @@ def genus_symbol_from_label(label):
     :param label: str
     :return: GenusSymbol_global_ring
 
-    >>> all_syms = all_genus_symbols(8,0,2**5*3**4*5**3*7**2,is_even=False)
+    >>> all_syms = all_genus_symbols(8,0,2**5*3**4*5**3*7**2,only_even=False)
     >>> all([genus_symbol_from_label(create_genus_label(s)) == s for s in all_syms])
     True
     '''
@@ -469,7 +475,7 @@ def genus_symbol_from_label(label):
 # This is based on the __repr__ method from local symbols
 # !! TODO !! - should refactor the code there and then use it
 
-def conway_symbol_diadic(local_symbol):
+def conway_symbol_dyadic(local_symbol):
     CS = local_symbol.canonical_symbol()
     trains = local_symbol.trains()
     comps = local_symbol.compartments()
@@ -488,7 +494,7 @@ def conway_symbol_diadic(local_symbol):
             elif comps[0][0] == 0:
                 comps = [comps[0][1:]] + comps[1:]
 
-
+    CS_string = ""
     for train in trains:
         # mark the beginning of a train with a colon
         CS_string += " :"
@@ -523,12 +529,26 @@ def conway_symbol_diadic(local_symbol):
 
 # Here we do not want the trains and compartments, for the global symbol
 def conway_symbol_local_part(local_symbol):
+    '''
+    Returns the part of the Conway symbol of the global genus symbol corresponding to the local symbol
+
+    :param local_symbol: Genus_Symbol_p_adic_ring
+    :return: str
+
+    >>> s2A = Genus_Symbol_p_adic_ring(2, [[0,2,1,0,0],[1,2,1,1,2],[3,2,1,1,0]])
+    >>> s2B = Genus_Symbol_p_adic_ring(2, [[0,2,1,0,0],[1,2,1,1,0],[3,2,1,1,2]])
+    >>> conway_symbol_local_part(s2A)
+    '2^{2}_{2}8^{2}_{I}'
+    >>> conway_symbol_local_part(s2B)
+    '2^{2}_{I}8^{2}_{2}'
+    '''
     p = local_symbol.prime()
     CS_string = ""
-    symbols = local_symbol.canonical_symbol()
+    symbols = local_symbol.canonical_symbol()[:]
     if (p == 2) and (symbols[0][3] == 0):
         oddities = [i for i,s in enumerate(symbols) if s[4] != 0]
-        if len(oddities) > 0:
+        zero_odd = len([s for s in symbols if (s[3] == 1) and (s[4] == 0)])
+        if (len(oddities) > 0) and (zero_odd == 0):
             last_idx = oddities[-1]
             # we won't display the oddity when it can be inferred from the oddity formula
             symbols[last_idx][4] = 0
@@ -656,9 +676,11 @@ COL_TYPE_LATIICE_GENUS = {'label' : 'text',
                           'is_even' : 'boolean',
                           'discriminant_group_invs' : 'integer[]',
                           'discriminant_form' : 'integer[]',
+                          'rep' : 'integer[]', # We add this one as input for fill_genus.m
+                          'theta_prec' : 'integer',
                           #'adjacency_matrix' : 'jsonb',
                           #'adjacency_polynomials' : 'jsonb',
-                          #'mass' : 'numeric[]',
+                          'mass' : 'numeric[]',
 }
 
 def write_header_to_file(fname, sep = "|", col_type=COL_TYPE_LATIICE_GENUS):
@@ -679,7 +701,8 @@ def value_to_postgres(val):
     if type(val) == tuple:
         return value_to_postgres(list(val))
     if type(val) == str:
-        return '"' + val + '"'
+        # return '"' + val + '"'
+        return val
     if type(val) == dict:
         d = {}
         for k in val.keys():
@@ -691,7 +714,9 @@ def value_to_postgres(val):
 
 def write_entries_to_file(entries, fname, sep = "|", col_type=COL_TYPE_LATIICE_GENUS):
     # we want to have a well defined order, matching the entries
-    fields = sorted(list(col_type.keys()))
+    # fields = sorted(list(col_type.keys()))
+    with open("genera_basic.format") as f:
+        fields = f.read().split("|")
     lines = [sep.join([value_to_postgres(entry[k]) for k in fields]) for entry in entries]
     output = "\n".join(lines)
     f = open(fname, "a")
@@ -712,11 +737,43 @@ def write_all_of_sig_up_to_det(n_plus, n_minus, det):
         os.makedirs("data")
     fname = "data/genera_signature_%s_%s_%s.tbl" % (n_plus, n_minus, det)
     write_header_to_file(fname)
+    sgn = 1 if is_even(n_minus) else -1;
     for d in range(1, det+1):
-        print("determinant = %s" % d)
-        syms = all_genus_symbols(n_plus, n_minus, d, is_even=False)
+        print("determinant = %s" % (sgn*d))
+        syms = all_genus_symbols(n_plus, n_minus, sgn*d, only_even=False)
         entries = [create_genus_entry(s) for s in syms]
         write_entries_to_file(entries, fname)
+
+def write_all_of_sig_between(n_plus, n_minus, lb_det, ub_det):
+    '''
+    Create data file with all genera of a certain signature with determinant between lb_det and ub_det
+    '''
+    if not os.path.exists("data"):
+        os.makedirs("data")
+    fname = "data/genera_signature_%s_%s_%s_%s.tbl" % (n_plus, n_minus, lb_det, ub_det)
+    write_header_to_file(fname)
+    sgn = 1 if is_even(n_minus) else -1;
+    for d in range(lb_det, ub_det+1):
+        # print("determinant = %s" % (sgn*d))
+        syms = all_genus_symbols(n_plus, n_minus, sgn*d, only_even=False)
+        entries = [create_genus_entry(s) for s in syms]
+        write_entries_to_file(entries, fname)
+
+def write_all_of_sig_between_genera_basic(n_plus, n_minus, lb_det, ub_det):
+    '''
+    Create data files with all genera of a certain signature with determinant between lb_det and ub_det,
+    one file for each genus
+    '''
+    if not os.path.exists("genera_basic"):
+        os.makedirs("genera_basic")
+    sgn = 1 if is_even(n_minus) else -1;
+    for d in range(lb_det, ub_det+1):
+        syms = all_genus_symbols(n_plus, n_minus, sgn*d, only_even=False)
+        entries = [create_genus_entry(s) for s in syms]
+        for genus in entries:
+            fname = "genera_basic/%s" % genus['label']
+            write_entries_to_file([genus], fname)
+
 
 def write_all_up_to_det(rank, det):
     '''
@@ -726,3 +783,54 @@ def write_all_up_to_det(rank, det):
         n_plus = rank - n_minus
         print("signature = (%s,%s)" %(n_plus, n_minus))
         write_all_of_sig_up_to_det(n_plus, n_minus, det)
+
+def determinant_condition(sp, det):
+    p = sp.prime()
+    sgn = prod([x[2] for x in sp.symbol_tuple_list()])
+    _, a = det.val_unit(p)
+    return kronecker(sgn,p) == a.kronecker(p)
+
+def oddity_condition(genus_symbol):
+    s = genus_symbol
+    s2 = s.local_symbol(2)
+    oddity_s = oddity(s2.symbol_tuple_list())
+    excess = sum([sp.excess() for sp in s.local_symbols() if sp.prime() != 2])
+    return (s.signature() + excess - oddity_s) % 8 == 0
+
+def jordan_condition(genus_symbol):
+    s2 = genus_symbol.local_symbol(2)
+    tups = s2.symbol_tuple_list()
+    for t in tups:
+        n = t[1]
+        d = t[2]
+        s = t[3]
+        o = t[4]
+        if n == 0:
+           if (s == 1) or (d in [3,5]):
+               return False
+        if n == 1:
+            if (d in [1,7]) and (o not in [1,7]):
+                return False
+            if (d in [3,5]) and (o not in [3,5]):
+                return False
+        if (n == 2) and (s == 1):
+            if (d in [1,7]) and (o not in [0,4,6]):
+                return False
+            if (d in [3,5]) and (o not in [2,4,6]):
+                return False    
+        if (n > 2):
+            if ((o - n) % 2 != 0):
+                return False
+            if (s == 0) and (o != 0):
+                return False
+    return True
+
+def check_genus_symbol(genus_symbol):
+    jordan = jordan_condition(genus_symbol)
+    odd = oddity_condition(genus_symbol)
+    ls = genus_symbol.local_symbols()
+    det = genus_symbol.determinant()
+    det_conds = [(sp.prime(), determinant_condition(sp, det)) for sp in ls]
+    return det_conds, odd, jordan
+
+# (Working on code for filling all the entries in lat_lattices and lat_genera)
