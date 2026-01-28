@@ -1,8 +1,6 @@
 // This file is used to find all of the representatives in a positive definite genus, along with some difficult to compute quantities about the genus itself.
 // Usage: parallel -j 100 --timeout 1800 -a genera_todo.txt magma -b label:={} fill_genus.m
 
-// Todo: attach finite group code for IO.m and GroupToString
-// AttachSpec("/Users/roed/sage/FiniteGroups/Code/spec");
 AttachSpec("lattices.spec");
 
 function hecke_primes(rank)
@@ -19,7 +17,7 @@ end function;
 
 function to_postgres(val)
     if Type(val) eq MonStgElt then
-        return "\"" * val * "\"";
+        return "\"" * val * "\""; // This will fail if the string has quotes, but I don't think that's ever true for us.
     elif Type(val) in [SeqEnum, Tup] then
         return "{" * Join([Sprintf("%o",to_postgres(x)) : x in val],",") * "}";
     elif Type(val) eq Assoc then
@@ -124,7 +122,7 @@ procedure fill_genus(label)
             for p->hmat in hecke_mats do
                 pne[p] := [i : i in [1..#reps] | hmat[(Li-1)*(#reps)+i] gt 0];
             end for;
-            lat["pneighbors"] := pne;
+            lat["pneighbors"] := pne; // adjusted below
         else
             lat["gram"] := Eltseq(gram);
             // !!!  TODO - Need to be able to compute the automorphism group for non-definite lattices
@@ -160,10 +158,9 @@ procedure fill_genus(label)
         lat["Zn_complement"] := "\\N"; // set in next stage
 
         lat["level"] := Level(LatticeWithGram(ChangeRing(GramMatrix(L), Integers()) : CheckPositive:=false));
-        
-        // Need dual_label, dual_conway
+
         // Compute festi_veniani_index in Sage?
-        
+
         // TODO - do we also need these? or should we only keep them for the genus?
         lat["genus_label"] := basics["label"];
         lat["conway_symbol"] := basics["conway_symbol"];
@@ -208,7 +205,9 @@ procedure fill_genus(label)
         lat["label"] := Sprintf("%o.%o", basics["label"], idx);
     end for;
     for lat in lats do
-        lat["pneighbors"] := [lats[i]["label"] : i in lat["pneighbors"]];
+        if lat["pneighors"] cmpne "\\N" then
+            lat["pneighbors"] := [lats[i]["label"] : i in lat["pneighbors"]];
+        end if;
         output := Join([Sprintf("%o", to_postgres(lat[k])) : k in lat_format], "|");
         Write("lattice_data/" * lat["label"], output : Overwrite);
     end for;
